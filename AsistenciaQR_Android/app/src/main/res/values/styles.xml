@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.AsistenciaQR" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#1F4E78</item>
+    </style>
+</resources>

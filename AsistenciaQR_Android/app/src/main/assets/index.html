@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title id="tituloPestana">Sistema de Asistencia QR - 187 estudiantes</title>
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<style>
+body{font-family:Arial,sans-serif;margin:0;background:#f3f6fa;color:#17202a}
+header{background:#1f4e78;color:#fff;padding:18px;text-align:center}
+main{max-width:1100px;margin:auto;padding:18px}
+.card{background:#fff;border-radius:12px;padding:18px;margin:14px 0;box-shadow:0 2px 10px #0001}
+button{border:0;border-radius:8px;padding:11px 15px;margin:5px;cursor:pointer;background:#1f4e78;color:#fff}
+button.secondary{background:#607d8b}
+button.danger{background:#b71c1c}
+input{padding:10px;border:1px solid #bbb;border-radius:7px;box-sizing:border-box;margin:5px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.stat{padding:15px;border-radius:9px;background:#eef3f8}
+.stat b{font-size:25px;display:block}
+#reader{max-width:500px;margin:auto}
+.status{padding:12px;border-radius:8px;background:#e8f5e9;margin-top:10px}
+.error{background:#ffebee}
+.warn{background:#fff8e1}
+table{width:100%;border-collapse:collapse;margin-top:12px}
+th,td{border:1px solid #ddd;padding:8px;text-align:left}
+th{background:#1f4e78;color:#fff}
+.present{font-weight:bold}
+.late{font-weight:bold}
+.absent{font-weight:bold}
+.small{font-size:13px;color:#555}
+.scroll{overflow:auto}
+.editbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;background:#fff3cd;border:1px solid #ffe69c}
+.editable-on [data-editable="true"]{outline:2px dashed #f0ad4e;outline-offset:3px;border-radius:4px}
+[data-editable="true"][contenteditable="true"]{background:#fffdf2}
+.edit-note{font-size:13px;color:#664d03}
+button.edit{background:#8a5a00}
+
+.login-screen{position:fixed;inset:0;background:#eef3f8;display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px}
+.login-box{background:#fff;width:min(420px,100%);padding:28px;border-radius:14px;box-shadow:0 8px 30px #0002;text-align:center}
+.login-box h2{margin-top:0;color:#1f4e78}
+.login-box input{width:100%;margin:7px 0 12px}
+.login-error{display:none;background:#ffebee;color:#9b1c1c;padding:10px;border-radius:7px;margin:8px 0}
+#appContenido{display:none}
+.top-actions{display:flex;justify-content:flex-end;max-width:1100px;margin:10px auto 0;padding:0 18px}
+</style>
+</head>
+<body>
+<div id="loginScreen" class="login-screen">
+  <div class="login-box">
+    <h2>🔐 Acceso al Sistema de Asistencia</h2>
+    <p class="small">Solo personal autorizado.</p>
+    <input type="text" id="loginUsuario" placeholder="Usuario" autocomplete="username">
+    <input type="password" id="loginClave" placeholder="Contraseña" autocomplete="current-password">
+    <div id="loginError" class="login-error">Usuario o contraseña incorrectos.</div>
+    <button onclick="iniciarSesion()">Ingresar</button>
+  </div>
+</div>
+<div id="appContenido">
+
+<header>
+<h1 data-editable="true" data-key="titulo">📷 Sistema de Asistencia por QR</h1>
+<div data-editable="true" data-key="subtitulo">187 estudiantes · Asistencia automática: ASISTIÓ · TARDE · FALTA</div>
+</header>
+<div class="top-actions"><button class="secondary" onclick="cerrarSesion()">🔒 Cerrar sesión</button></div>
+<main>
+
+<div class="card editbar">
+  <button class="edit" id="btnEditar" onclick="alternarEdicion()">✏️ Activar modo edición</button>
+  <button class="secondary" onclick="guardarTextos()">💾 Guardar textos</button>
+  <button class="danger" onclick="restaurarTextos()">↩️ Restaurar textos</button>
+  <span class="edit-note">Activa el modo edición y toca cualquier texto marcado para cambiarlo. Los cambios se guardan en este dispositivo.</span>
+</div>
+
+<div class="card">
+<h2 data-editable="true" data-key="sec1">1. Configuración del horario</h2>
+<div class="grid">
+<label><span data-editable="true" data-key="labInicio">Hora de inicio de asistencia</span><br><input type="time" id="horaInicio" value="07:30"></label>
+<label><span data-editable="true" data-key="labLimite">Hora límite para ASISTIÓ</span><br><input type="time" id="horaLimite" value="07:45"></label>
+<label><span data-editable="true" data-key="labFecha">Fecha de control</span><br><input type="date" id="fechaControl"></label>
+</div>
+<p class="small" data-editable="true" data-key="descHorario">Si el QR se registra hasta la hora límite: <b>ASISTIÓ</b>. Después de esa hora: <b>TARDE</b>. Al finalizar el día, quienes no tengan registro quedan como <b>FALTA</b>.</p>
+<button onclick="guardarConfig()"><span data-editable="true" data-key="btnGuardarHorario">Guardar horario</span></button>
+</div>
+
+<div class="card">
+<h2 data-editable="true" data-key="sec2">2. Cargar estudiantes</h2>
+<p class="small" data-editable="true" data-key="descImport">Importa un Excel con: N°, DNI, Apellidos y nombres, Grado, Sección, Código QR, Estado.</p>
+<input type="file" id="excelFile" accept=".xlsx,.xls,.csv">
+<button onclick="importarExcel()"><span data-editable="true" data-key="btnImportar">Importar Excel</span></button>
+<button class="secondary" onclick="cargarDemo()"><span data-editable="true" data-key="btnDemo">Cargar 187 registros de ejemplo</span></button>
+<div id="studentMsg" class="status">No hay estudiantes cargados.</div>
+</div>
+
+<div class="card">
+<h2 data-editable="true" data-key="sec3">3. Registrar asistencia con la cámara</h2>
+<button onclick="iniciarCamara()"><span data-editable="true" data-key="btnCamara">📷 Abrir cámara</span></button>
+<button class="secondary" onclick="detenerCamara()"><span data-editable="true" data-key="btnDetener">Detener cámara</span></button>
+<div id="reader"></div>
+<div id="scanResult" class="status">Esperando un QR...</div>
+</div>
+
+<div class="card">
+<h2 data-editable="true" data-key="sec4">4. Resumen del día</h2>
+<div class="grid">
+<div class="stat"><span data-editable="true" data-key="statTotal">Total</span><b id="total">0</b></div>
+<div class="stat"><span data-editable="true" data-key="statAsistieron">🟢 Asistieron</span><b id="presentes">0</b></div>
+<div class="stat"><span data-editable="true" data-key="statTarde">🟡 Tarde</span><b id="tardes">0</b></div>
+<div class="stat"><span data-editable="true" data-key="statFaltas">🔴 Faltas</span><b id="faltas">187</b></div>
+</div>
+<br>
+<button onclick="cerrarDia()"><span data-editable="true" data-key="btnCerrar">🔒 Cerrar día y generar lista de 187 estudiantes</span></button>
+<button onclick="exportarExcel()"><span data-editable="true" data-key="btnExcel">⬇️ Descargar Excel</span></button>
+<div id="cierre" class="status">El día aún no ha sido cerrado.</div>
+</div>
+
+<div class="card">
+<h2 data-editable="true" data-key="sec5">5. Lista diaria de los 187 estudiantes</h2>
+<p class="small" data-editable="true" data-key="descLista">La lista se genera incluyendo incluso a quienes no escanearon su QR.</p>
+<div class="scroll">
+<table>
+<thead><tr><th data-editable="true" data-key="thN">N°</th><th data-editable="true" data-key="thDni">DNI</th><th data-editable="true" data-key="thEstudiante">Estudiante</th><th data-editable="true" data-key="thGrado">Grado</th><th data-editable="true" data-key="thSeccion">Sección</th><th data-editable="true" data-key="thHora">Hora</th><th data-editable="true" data-key="thEstado">Estado</th></tr></thead>
+<tbody id="tabla"></tbody>
+</table>
+</div>
+</div>
+
+<div class="card">
+<h2 data-editable="true" data-key="sec6">6. Registros de asistencia</h2>
+<div class="scroll">
+<table>
+<thead><tr><th data-editable="true" data-key="thFecha2">Fecha</th><th data-editable="true" data-key="thHora2">Hora</th><th data-editable="true" data-key="thDni2">DNI</th><th data-editable="true" data-key="thEstudiante2">Estudiante</th><th data-editable="true" data-key="thGrado2">Grado</th><th data-editable="true" data-key="thSeccion2">Sección</th><th data-editable="true" data-key="thEstado2">Estado</th><th data-editable="true" data-key="thQr2">QR</th></tr></thead>
+<tbody id="tablaRegistros"></tbody>
+</table>
+</div>
+<button class="danger" onclick="borrarAsistencia()"><span data-editable="true" data-key="btnBorrar">Borrar registros guardados en este dispositivo</span></button>
+</div>
+
+</main>
+
+</div>
+<script>
+
+// ===== ACCESO DEL SISTEMA =====
+// Cambia estos dos valores para definir el usuario y la contraseña.
+const USUARIO_SISTEMA = "admin";
+const CLAVE_SISTEMA = "1234";
+
+function iniciarSesion(){
+  const u=document.getElementById("loginUsuario").value.trim();
+  const c=document.getElementById("loginClave").value;
+  if(u===USUARIO_SISTEMA && c===CLAVE_SISTEMA){
+    sessionStorage.setItem("sesionAsistenciaQR","activa");
+    mostrarSistema();
+  }else{
+    document.getElementById("loginError").style.display="block";
+  }
+}
+function mostrarSistema(){
+  document.getElementById("loginScreen").style.display="none";
+  document.getElementById("appContenido").style.display="block";
+}
+function cerrarSesion(){
+  detenerCamara();
+  sessionStorage.removeItem("sesionAsistenciaQR");
+  document.getElementById("appContenido").style.display="none";
+  document.getElementById("loginScreen").style.display="flex";
+  document.getElementById("loginClave").value="";
+  document.getElementById("loginError").style.display="none";
+}
+document.getElementById("loginClave").addEventListener("keydown",e=>{if(e.key==="Enter")iniciarSesion();});
+if(sessionStorage.getItem("sesionAsistenciaQR")==="activa") mostrarSistema();
+
+
+const textosOriginales={};
+document.querySelectorAll('[data-editable="true"]').forEach(el=>textosOriginales[el.dataset.key]=el.innerHTML);
+
+function cargarTextos(){
+  const guardados=JSON.parse(localStorage.getItem("textosQR")||"{}");
+  document.querySelectorAll('[data-editable="true"]').forEach(el=>{
+    if(guardados[el.dataset.key]!==undefined) el.innerHTML=guardados[el.dataset.key];
+  });
+  const titulo=document.querySelector('[data-key="titulo"]');
+  if(titulo) document.title=titulo.textContent.trim();
+}
+function alternarEdicion(){
+  const activo=document.body.classList.toggle('editable-on');
+  document.querySelectorAll('[data-editable="true"]').forEach(el=>el.contentEditable=activo?'true':'false');
+  document.getElementById('btnEditar').textContent=activo?'✅ Finalizar edición':'✏️ Activar modo edición';
+}
+function guardarTextos(){
+  const datos={};
+  document.querySelectorAll('[data-editable="true"]').forEach(el=>datos[el.dataset.key]=el.innerHTML);
+  localStorage.setItem('textosQR',JSON.stringify(datos));
+  const titulo=document.querySelector('[data-key="titulo"]');
+  if(titulo) document.title=titulo.textContent.trim();
+  alert('Textos y título guardados.');
+}
+function restaurarTextos(){
+  if(!confirm('¿Restaurar todos los textos originales?')) return;
+  localStorage.removeItem('textosQR');
+  document.querySelectorAll('[data-editable="true"]').forEach(el=>el.innerHTML=textosOriginales[el.dataset.key]);
+  document.title='Sistema de Asistencia QR - 187 estudiantes';
+}
+
+cargarTextos();
+let estudiantes=JSON.parse(localStorage.getItem("estudiantesQR")||"[]");
+let asistencias=JSON.parse(localStorage.getItem("asistenciaQR")||"[]");
+let cierres=JSON.parse(localStorage.getItem("cierresQR")||"{}");
+let config=JSON.parse(localStorage.getItem("configQR")||'{"inicio":"07:30","limite":"07:45"}');
+let scanner=null;
+
+const fechaHoy=()=>new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD
+document.getElementById("fechaControl").value=fechaHoy();
+document.getElementById("horaInicio").value=config.inicio;
+document.getElementById("horaLimite").value=config.limite;
+
+function guardar(){
+ localStorage.setItem("estudiantesQR",JSON.stringify(estudiantes));
+ localStorage.setItem("asistenciaQR",JSON.stringify(asistencias));
+ localStorage.setItem("cierresQR",JSON.stringify(cierres));
+ localStorage.setItem("configQR",JSON.stringify(config));
+ actualizar();
+}
+function guardarConfig(){
+ config={inicio:document.getElementById("horaInicio").value,limite:document.getElementById("horaLimite").value};
+ localStorage.setItem("configQR",JSON.stringify(config));
+ alert("Horario guardado.");
+ actualizar();
+}
+function cargarDemo(){
+ estudiantes=Array.from({length:187},(_,i)=>({
+  numero:i+1,dni:"",nombre:"Estudiante "+String(i+1).padStart(3,"0"),
+  grado:"",seccion:"",qr:"EST"+String(i+1).padStart(3,"0"),estado:"Activo"
+ }));
+ guardar();
+}
+function importarExcel(){
+ const file=document.getElementById("excelFile").files[0];
+ if(!file)return alert("Selecciona un archivo Excel.");
+ const r=new FileReader();
+ r.onload=e=>{
+  const wb=XLSX.read(e.target.result,{type:"array"});
+  const sh=wb.Sheets[wb.SheetNames[0]];
+  const rows=XLSX.utils.sheet_to_json(sh,{defval:""});
+  estudiantes=rows.map((r,i)=>({
+   numero:r["N°"]||r["N"]||i+1,
+   dni:String(r["DNI"]||"").trim(),
+   nombre:r["Apellidos y nombres"]||r["Nombre"]||"",
+   grado:r["Grado"]||"",
+   seccion:r["Sección"]||"",
+   qr:r["Código QR"]||("EST"+String(i+1).padStart(3,"0")),
+   estado:r["Estado"]||"Activo"
+  })).filter(x=>x.nombre||x.dni);
+  guardar();
+  alert("Se cargaron "+estudiantes.length+" estudiantes.");
+ };
+ r.readAsArrayBuffer(file);
+}
+function estadoPorHora(){
+ const h=new Date().toTimeString().slice(0,5);
+ return h<=config.limite ? "ASISTIÓ" : "TARDE";
+}
+function registrarPorQR(texto){
+ const codigo=texto.trim();
+ const e=estudiantes.find(x=>x.qr===codigo||x.dni===codigo);
+ const box=document.getElementById("scanResult");
+ if(!e){box.className="status error";box.textContent="QR no registrado: "+codigo;return;}
+ const fecha=document.getElementById("fechaControl").value||fechaHoy();
+ const hora=new Date().toTimeString().slice(0,8);
+ if(asistencias.some(x=>x.qr===e.qr&&x.fecha===fecha)){
+  box.className="status warn";box.textContent="⚠️ "+e.nombre+" ya tiene registro para este día.";
+  return;
+ }
+ const estado=estadoPorHora();
+ asistencias.push({fecha,hora,dni:e.dni,nombre:e.nombre,grado:e.grado,seccion:e.seccion,estado,qr:e.qr});
+ guardar();
+ box.className=estado==="ASISTIÓ"?"status":"status warn";
+ box.textContent=(estado==="ASISTIÓ"?"✅ ":"🟡 ")+e.nombre+" · "+estado+" · "+hora;
+}
+async function iniciarCamara(){
+ if(!estudiantes.length){alert("Primero carga la lista de estudiantes.");return;}
+ if(scanner)return;
+ scanner=new Html5Qrcode("reader");
+ try{
+  await scanner.start({facingMode:"environment"},{fps:10,qrbox:{width:250,height:250}},registrarPorQR);
+ }catch(err){
+  document.getElementById("scanResult").className="status error";
+  document.getElementById("scanResult").textContent="No se pudo abrir la cámara. Autoriza la cámara y usa el sistema desde HTTPS.";
+ }
+}
+async function detenerCamara(){if(scanner){try{await scanner.stop();}catch(e){}scanner=null;}}
+function datosDia(fecha){
+ return estudiantes.map(e=>{
+  const a=asistencias.find(x=>x.qr===e.qr&&x.fecha===fecha);
+  return {...e,hora:a?a.hora:"",resultado:a?a.estado:"FALTA"};
+ });
+}
+function cerrarDia(){
+ const fecha=document.getElementById("fechaControl").value||fechaHoy();
+ if(!estudiantes.length){alert("Primero carga los 187 estudiantes.");return;}
+ const lista=datosDia(fecha);
+ const presentes=lista.filter(x=>x.resultado==="ASISTIÓ").length;
+ const tardes=lista.filter(x=>x.resultado==="TARDE").length;
+ const faltas=lista.filter(x=>x.resultado==="FALTA").length;
+ cierres[fecha]={fecha,presentes,tardes,faltas,total:lista.length,lista,cerradoEn:new Date().toLocaleString("es-PE")};
+ guardar();
+ document.getElementById("cierre").className="status";
+ document.getElementById("cierre").textContent=`✅ Día cerrado: ${fecha}. ${presentes} asistieron, ${tardes} llegaron tarde y ${faltas} faltaron. La lista completa de ${lista.length} estudiantes quedó guardada.`;
+}
+function actualizar(){
+ const fecha=document.getElementById("fechaControl").value||fechaHoy();
+ const lista=datosDia(fecha);
+ document.getElementById("total").textContent=lista.length;
+ document.getElementById("presentes").textContent=lista.filter(x=>x.resultado==="ASISTIÓ").length;
+ document.getElementById("tardes").textContent=lista.filter(x=>x.resultado==="TARDE").length;
+ document.getElementById("faltas").textContent=lista.filter(x=>x.resultado==="FALTA").length;
+ document.getElementById("studentMsg").textContent=estudiantes.length?`${estudiantes.length} estudiantes cargados.`:"No hay estudiantes cargados.";
+ let tb=document.getElementById("tabla");tb.innerHTML="";
+ lista.forEach(x=>{
+  const cls=x.resultado==="ASISTIÓ"?"present":x.resultado==="TARDE"?"late":"absent";
+  tb.innerHTML+=`<tr><td>${x.numero}</td><td>${x.dni}</td><td>${x.nombre}</td><td>${x.grado}</td><td>${x.seccion}</td><td>${x.hora||"—"}</td><td class="${cls}">${x.resultado}</td></tr>`;
+ });
+ tb=document.getElementById("tablaRegistros");tb.innerHTML="";
+ asistencias.slice().reverse().forEach(x=>{
+  tb.innerHTML+=`<tr><td>${x.fecha}</td><td>${x.hora}</td><td>${x.dni}</td><td>${x.nombre}</td><td>${x.grado}</td><td>${x.seccion}</td><td>${x.estado}</td><td>${x.qr}</td></tr>`;
+ });
+ const c=cierres[fecha];
+ document.getElementById("cierre").textContent=c
+  ? `✅ Día cerrado: ${fecha}. ${c.presentes} asistieron, ${c.tardes} tarde y ${c.faltas} faltas.`
+  : "El día aún no ha sido cerrado.";
+}
+function exportarExcel(){
+ if(!estudiantes.length){alert("No hay estudiantes.");return;}
+ const fecha=document.getElementById("fechaControl").value||fechaHoy();
+ const lista=datosDia(fecha);
+ const wb=XLSX.utils.book_new();
+ const diaria=lista.map(x=>({
+  "N°":x.numero,"DNI":x.dni,"Apellidos y nombres":x.nombre,
+  "Grado":x.grado,"Sección":x.seccion,"Hora":x.hora||"",
+  "Estado":x.resultado
+ }));
+ const registros=asistencias.filter(x=>x.fecha===fecha).map(x=>({
+  "Fecha":x.fecha,"Hora":x.hora,"DNI":x.dni,"Apellidos y nombres":x.nombre,
+  "Grado":x.grado,"Sección":x.seccion,"Estado":x.estado,"Código QR":x.qr
+ }));
+ const resumen=[{
+  "Fecha":fecha,"Total estudiantes":lista.length,
+  "ASISTIÓ":lista.filter(x=>x.resultado==="ASISTIÓ").length,
+  "TARDE":lista.filter(x=>x.resultado==="TARDE").length,
+  "FALTA":lista.filter(x=>x.resultado==="FALTA").length
+ }];
+ XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(diaria),"Lista diaria");
+ XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(resumen),"Resumen");
+ XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(registros),"Registros");
+ const nombreArchivo="Asistencia_"+fecha+"_187_Estudiantes.xlsx";
+ if(window.Android && Android.saveBase64){
+   const b64=XLSX.write(wb,{bookType:"xlsx",type:"base64"});
+   Android.saveBase64(nombreArchivo,b64);
+ }else{
+   XLSX.writeFile(wb,nombreArchivo);
+ }
+}
+function borrarAsistencia(){
+ if(confirm("¿Borrar todos los registros de asistencia de este dispositivo?")){
+  asistencias=[];cierres={};guardar();
+ }
+}
+document.getElementById("fechaControl").addEventListener("change",actualizar);
+actualizar();
+</script>
+</body>
+</html>
